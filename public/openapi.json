@@ -1,0 +1,333 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Airport Pickups London — Transfer Booking API",
+    "description": "Get quotes, validate flights, and book airport, cruise port, and point-to-point transfers across the UK. Covers all London airports (Heathrow, Gatwick, Stansted, Luton, City Airport), Edinburgh Airport, major cruise ports (Southampton, Dover, Portsmouth), and any UK address or postcode. Fixed prices, no surge pricing, free cancellation 12+ hours before pickup.",
+    "version": "1.1.0",
+    "contact": {
+      "name": "Airport Pickups London",
+      "url": "https://www.airport-pickups-london.com",
+      "email": "info@aplcars.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://mcp.airport-pickups-london.com",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/quote": {
+      "post": {
+        "operationId": "getTransferQuote",
+        "summary": "Get transfer prices for any UK route",
+        "description": "Returns available car types with prices, passenger capacity, and luggage capacity for a transfer between any two UK locations. Use this to show customers their options before booking.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["origin", "destination"],
+                "properties": {
+                  "origin": {
+                    "type": "string",
+                    "description": "Pickup location — airport name (e.g. 'Heathrow', 'Gatwick'), cruise port, address, hotel name, or UK postcode",
+                    "examples": ["Heathrow Terminal 2", "SW1A 1AA", "The Ritz London"]
+                  },
+                  "destination": {
+                    "type": "string",
+                    "description": "Dropoff location — address, postcode, hotel name, airport, or area name",
+                    "examples": ["W1K 1LN", "Gatwick South", "Hilton Park Lane"]
+                  },
+                  "passengers": {
+                    "type": "integer",
+                    "description": "Number of passengers (default 1)",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "suitcases": {
+                    "type": "integer",
+                    "description": "Number of suitcases/large bags (default 1)",
+                    "default": 1,
+                    "minimum": 0,
+                    "maximum": 50
+                  },
+                  "requestedDiscountPercent": {
+                    "type": "number",
+                    "description": "A2A pricing negotiation: request a discount (max 5%). Values above 5 are capped. Non-negotiable items: peak surcharges, event pricing, child seats.",
+                    "minimum": 0,
+                    "maximum": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quote with available car types and prices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pickup": { "type": "string", "description": "Resolved pickup location name" },
+                    "dropoff": { "type": "string", "description": "Resolved dropoff location name" },
+                    "passengers": { "type": "integer" },
+                    "recommended_car_type": { "type": "string", "description": "Recommended car based on passenger/luggage count" },
+                    "appliedDiscountPercent": { "type": "number", "description": "Actual discount applied (0-5%). Only present when a discount was requested." },
+                    "cars": {
+                      "type": "array",
+                      "description": "Available car types with prices",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "car_type": { "type": "string", "description": "Vehicle type name (e.g. Saloon, People Carrier, 8 Seater)" },
+                          "price_gbp": { "type": "number", "description": "Fixed price in GBP" },
+                          "max_passengers": { "type": "integer", "description": "Maximum passenger capacity" },
+                          "max_bags": { "type": "integer", "description": "Maximum suitcase capacity" }
+                        }
+                      }
+                    },
+                    "meeting_point": {
+                      "type": "object",
+                      "description": "Driver meeting instructions for airport/station pickups",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "instructions": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or route not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/validate-flight": {
+      "post": {
+        "operationId": "validateFlight",
+        "summary": "Validate a flight number and get terminal, airline, and arrival time",
+        "description": "Validates a flight number and returns airline, arrival airport, terminal, and time. Use before booking to verify the flight and auto-detect terminal. Never blocks booking.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["flight_number", "date"],
+                "properties": {
+                  "flight_number": {
+                    "type": "string",
+                    "description": "Flight number (e.g. 'BA2534', 'EK007', 'AA38')",
+                    "examples": ["BA2534", "EK007", "AA38"]
+                  },
+                  "date": {
+                    "type": "string",
+                    "description": "Flight date in YYYY-MM-DD format",
+                    "examples": ["2026-04-15"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Flight validation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": { "type": "boolean", "description": "Whether the flight was found and verified" },
+                    "airline": { "type": "string", "description": "Airline name (e.g. 'British Airways')" },
+                    "flight_number": { "type": "string", "description": "Normalised flight number (e.g. 'BA2534')" },
+                    "arrival_airport": { "type": "string", "description": "Arrival airport name (e.g. 'Heathrow')" },
+                    "arrival_terminal": { "type": "string", "description": "Arrival terminal (e.g. 'T5', 'North')" },
+                    "arrival_time": { "type": "string", "description": "Scheduled arrival time in HH:MM format" },
+                    "departure_airport": { "type": "string", "description": "Departure airport IATA code (e.g. 'JFK')" },
+                    "source": { "type": "string", "description": "Data source — 'flightstats' (live API) or 'static_mapping' (airline terminal database)" },
+                    "message": { "type": "string", "description": "Error message when valid is false" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/book": {
+      "post": {
+        "operationId": "createTransferBooking",
+        "summary": "Book a transfer — creates a real reservation",
+        "description": "Creates a real transfer booking. Only call after customer confirms details and price. For airport pickups, provide flight_number to auto-detect terminal. Bookings created as cash, online payment via manage_booking_url.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["origin", "destination", "transfer_date", "transfer_time", "passenger_name", "passenger_phone"],
+                "properties": {
+                  "origin": {
+                    "type": "string",
+                    "description": "Pickup location — airport name, address, or postcode"
+                  },
+                  "destination": {
+                    "type": "string",
+                    "description": "Dropoff location — address, postcode, or airport name"
+                  },
+                  "transfer_date": {
+                    "type": "string",
+                    "description": "Transfer date in YYYY-MM-DD format",
+                    "examples": ["2026-04-15"]
+                  },
+                  "transfer_time": {
+                    "type": "string",
+                    "description": "Pickup time in HH:MM format (24-hour). For airport pickups this is when the customer wants to be collected (after landing + customs). The system calculates the waiting time from the flight landing time automatically.",
+                    "examples": ["14:30"]
+                  },
+                  "passengers": {
+                    "type": "integer",
+                    "description": "Number of passengers (default 1)",
+                    "default": 1
+                  },
+                  "suitcases": {
+                    "type": "integer",
+                    "description": "Number of suitcases (default 1)",
+                    "default": 1
+                  },
+                  "car_type": {
+                    "type": "string",
+                    "description": "Car type from the quote (e.g. 'Saloon', 'People Carrier', '8 Seater', 'Executive Saloon')"
+                  },
+                  "passenger_name": {
+                    "type": "string",
+                    "description": "Full name of the passenger"
+                  },
+                  "passenger_phone": {
+                    "type": "string",
+                    "description": "Phone number with country code (e.g. +447123456789)"
+                  },
+                  "passenger_email": {
+                    "type": "string",
+                    "description": "Email address for booking confirmation and manage booking link"
+                  },
+                  "flight_number": {
+                    "type": "string",
+                    "description": "Flight number for airport pickups (e.g. BA2534). System validates and auto-detects terminal. Required for airport pickups, optional for dropoffs."
+                  },
+                  "cruise_name": {
+                    "type": "string",
+                    "description": "Cruise/ship name for cruise port transfers"
+                  },
+                  "train_number": {
+                    "type": "string",
+                    "description": "Train number or origin for station pickups"
+                  },
+                  "door_number": {
+                    "type": "string",
+                    "description": "House/building number for postcode destinations"
+                  },
+                  "special_requests": {
+                    "type": "string",
+                    "description": "Special requirements (e.g. 'child seat needed — forward-facing (age 3)', 'wheelchair')"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Booking confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "booking_reference": { "type": "string", "description": "Booking reference number (e.g. 955125)" },
+                    "status": { "type": "string", "description": "Booking status — 'confirmed'" },
+                    "pickup": { "type": "string" },
+                    "dropoff": { "type": "string" },
+                    "date": { "type": "string" },
+                    "time": { "type": "string" },
+                    "car_type": { "type": "string" },
+                    "price_gbp": { "type": "number" },
+                    "passengers": { "type": "integer" },
+                    "manage_booking_url": { "type": "string", "description": "Link to track driver, manage booking, and pay online (card, Apple Pay, Google Pay, PayPal, Revolut, WeChat Pay, AliPay)" },
+                    "meeting_point": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string", "description": "Terminal/location name (e.g. 'Heathrow T2')" },
+                        "instructions": { "type": "string", "description": "Where to meet the driver" }
+                      }
+                    },
+                    "flight_info": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Flight details from automatic validation (included when flight_number was provided and verified for airport pickups)",
+                      "properties": {
+                        "airline": { "type": "string", "description": "Airline name (e.g. 'British Airways')" },
+                        "flight_number": { "type": "string", "description": "Normalised flight number" },
+                        "arrival_airport": { "type": "string", "description": "Arrival airport name" },
+                        "arrival_terminal": { "type": "string", "description": "Detected terminal (e.g. 'T5', 'North')" },
+                        "arrival_time": { "type": "string", "description": "Scheduled arrival time HH:MM" },
+                        "departure_airport": { "type": "string", "description": "Departure airport IATA code" }
+                      }
+                    },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Booking failed or missing fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key for authentication. Register at https://mcp.airport-pickups-london.com/a2a/register to get one."
+      }
+    }
+  },
+  "security": [
+    { "ApiKeyAuth": [] }
+  ]
+}
